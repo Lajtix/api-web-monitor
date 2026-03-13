@@ -135,11 +135,14 @@ async def monitor_loop():
 
         db = SessionLocal()
         try:
+            fake_headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            }
             websites = db.execute(select(DBWebsite)).scalars().all()
             async with httpx.AsyncClient() as client:
                 for site in websites:
                     try:
-                        response = await client.get(f"https://www.{site.url}", timeout=5.0, follow_redirects=True)
+                        response = await client.get(f"https://www.{site.url}", timeout=5.0, follow_redirects=True, headers=fake_headers)
                         site.status = "Online 🟢" if response.status_code == 200 else f"Warning 🟠 ({response.status_code})"
                     except Exception:
                         site.status = "Offline 🔴"
