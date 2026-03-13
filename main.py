@@ -11,10 +11,6 @@ from database import engine, get_db, SessionLocal
 from models import Base, DBWebsite, PingLog
 from schemas import Website
 
-
-
-from dotenv import load_dotenv
-
 Base.metadata.create_all(bind=engine)
 # This creates your web server
 app = FastAPI()
