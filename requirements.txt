@@ -4,3 +4,6 @@ sqlalchemy
 pydantic
 httpx
 psycopg2-binary
+pandas
+openpyxl
+dotenv

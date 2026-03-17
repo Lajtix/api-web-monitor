@@ -1,3 +1,6 @@
+import os
+from dotenv import load_dotenv
+
 import httpx
 import asyncio
 from datetime import datetime
@@ -11,17 +14,21 @@ from database import engine, get_db, SessionLocal
 from models import Base, DBWebsite, PingLog
 from schemas import Website
 
+import io
+import pandas as pd
+from fastapi.responses import StreamingResponse
+
 Base.metadata.create_all(bind=engine)
 # This creates your web server
-app = FastAPI()
+app = FastAPI(title="My Super Monitorr")
 
 
 # 2. Pydantic Model: This tells FastAPI exactly what a "Website" should look like
 
 # This tells the server what to do when someone visits the homepage
 
-
-API_KEY_CREDENTIAL = "ggezi"
+load_dotenv()
+API_KEY_CREDENTIAL = os.getenv("API_KEY_CREDENTIAL")
 
 def verify_api_key(api_key: Annotated[str, Header()] = None):
     if api_key != API_KEY_CREDENTIAL:
@@ -151,9 +158,8 @@ async def monitor_loop():
 
                     new_log = PingLog(timestamp=site.last_checked,
                                       status_code=response.status_code,
-                                      website_id=site.id
                                       )
-                    db.add(new_log)
+                    site.logs.append(new_log)
                 db.commit()
                 print("Automatic scan of webs done")
 
@@ -164,7 +170,8 @@ async def monitor_loop():
 
 @app.get("/web-logs/{log_id}/")
 def show_logs(log_id: int, db: Session = Depends(get_db)):
-    log = db.execute(select(PingLog).where(PingLog.id == log_id)).scalar_one_or_none()
+   # log = db.execute(select(PingLog).where(PingLog.id == log_id)).scalar_one_or_none()
+    log = db.execute(select(PingLog).join(PingLog.owner).where(PingLog.id == log_id))
     if log:
         return {
             "log_time": log.timestamp,
@@ -180,8 +187,9 @@ def show_web_stats(id: int, db: Session = Depends(get_db)):
     if web is None:
         raise HTTPException(status_code=404, detail="Web not found")
     total_pings = len(web.logs)
-
-    success_pings = len([ping for ping in web.logs if ping.status_code == 200])
+    total_pings = db.execute(select(func.count(PingLog.id).where(PingLog.website_id == id))
+    ).scalar() or 0
+    success_pings = db.execute(select(func.count(PingLog.id).where(PingLog.website_id == id).where(PingLog.status_code == 200))).scalar() or 0
 
     uptime_percentage = success_pings/total_pings * 100
 
@@ -220,6 +228,63 @@ def web_url_change(
     except Exception:
         db.rollback()
         raise HTTPException(status_code=400, detail="This url already exists in database")
+
+@app.get("/export-csv/{website_id}")
+def export_csv(website_id: int, db: Session = Depends(get_db)):
+    stmt = select(PingLog).where(PingLog.website_id == website_id)
+    logs = db.execute(stmt).scalars().all()
+
+    data = [{"time": l.timestamp, "status": l.status_code} for l in logs]
+
+    df = pd.DataFrame(data)
+    #CSV version
+    '''
+    stream = io.StringIO()
+
+    df.to_csv(stream, index=False)
+
+    stream.seek(0)
+
+    return StreamingResponse(
+        stream,
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename=pings_{website_id}.csv"}
+    )
+    '''
+    #EXCEL version
+    buffer = io.BytesIO()
+
+    with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+        df.to_excel(writer, sheet_name="Uptime Report")
+
+        #workbook = writer.book
+        worksheet = writer.sheets["Uptime Report"]
+
+        from openpyxl.styles import Font
+        header_font = Font(bold=True, color="FFFFFF")
+        from openpyxl.styles import PatternFill
+        header_fill = PatternFill(start_color="4F81BD", end_color="4F81BD", fill_type="solid")
+
+        for cell in worksheet[1]:
+            cell.font = header_font
+            cell.fill = header_fill
+
+        for col in worksheet.columns:
+            max_length = 0
+            column = col[0].column_letter
+            for cell in col:
+                if cell.value:
+                    max_length = max(max_length, len(str(cell.value)))
+                worksheet.column_dimensions[column].width = max_length + 2
+
+
+    buffer.seek(0)
+
+    return StreamingResponse(
+        buffer,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": "attachment; filename=report.xlsx"}
+    )
 
 
 @app.on_event("startup")

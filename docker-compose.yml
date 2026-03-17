@@ -1,0 +1,32 @@
+version: '3.8'
+services:
+  #DATABASE
+  db:
+    image: postgres:16
+    container_name: postgres_db
+    restart: always
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: uptime_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  #MY APP
+  web_monitor:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+    env_file:
+      - .env
+    environment:
+      - API_KEY=ggezi
+    depends_on:
+      - db
+
+volumes:
+  postgres_data:

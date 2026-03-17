@@ -1,21 +1,21 @@
 from database import Base
 from sqlalchemy import Column, Integer, String, ForeignKey
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, Mapped, mapped_column
 class DBWebsite(Base):
     __tablename__ = "websites"
-    id = Column(Integer, primary_key=True, index=True)
-    url = Column(String, unique=True)
-    status = Column(String, default="Unknown")
-    last_checked = Column(String, nullable=True)
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    url: Mapped[str] = mapped_column(unique=True)
+    status: Mapped[str] = mapped_column(default="Unknown")
+    last_checked: Mapped[str | None] = mapped_column( nullable=True)
 
-    logs = relationship("PingLog", back_populates="owner", cascade="all, delete-orphan")
+    logs: Mapped[list["PingLog"]] = relationship(back_populates="owner", cascade="all, delete-orphan")
 
 class PingLog(Base):
     __tablename__ = "ping_logs"
-    id = Column(Integer, primary_key=True, index=True)
-    timestamp = Column(String)
-    status_code = Column(Integer)
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    timestamp: Mapped[str]
+    status_code: Mapped[int]
 
-    website_id = Column(Integer, ForeignKey("websites.id"))
-    owner = relationship("DBWebsite", back_populates="logs")
+    website_id: Mapped[int] = mapped_column(ForeignKey("websites.id"))
+    owner: Mapped["DBWebsite"] = relationship(back_populates="logs")
 
